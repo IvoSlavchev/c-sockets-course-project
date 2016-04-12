@@ -6,13 +6,12 @@
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
- 
-int sock_raw;
-FILE* logfile;
-int i, j;
-struct sockaddr_in source, dest;
 
-void printData(unsigned char* data , int size) {
+FILE* logfile;
+struct sockaddr_in source;
+
+void printData(unsigned char* data, int size) {
+	int i, j;
     for (i = 0; i < size; i++) {
         if (i != 0 && i % 16 == 0) {
             fprintf(logfile,"         ");
@@ -48,7 +47,8 @@ void printData(unsigned char* data , int size) {
     }
 }
 
-void printIPHeader(unsigned char* buffer, int size) {     
+void printIPHeader(unsigned char* buffer, int size) {
+	struct sockaddr_in dest;  
     struct iphdr *iph = (struct iphdr*) buffer; 
     memset(&source, 0, sizeof(source));
     source.sin_addr.s_addr = iph->saddr;   
@@ -93,7 +93,15 @@ void printTCPPacket(unsigned char* buffer, int size) {
     fprintf(logfile,"\n###########################################################");
 }
 
-int main() {
+void checkIP(char* targetIp, char* ip) {
+	if (strcmp(targetIp, ip) == 0) {
+		printf("Target IP found. Sending an imaginary packet.\n");
+		// TODO: send packet
+	}
+}
+
+int main(int argc, char** argv) {
+	int sock_raw;
     unsigned int saddr_size , data_size;
     struct sockaddr saddr;   
     unsigned char* buffer = (unsigned char*) malloc(65536);   
@@ -105,6 +113,7 @@ int main() {
         struct iphdr *iph = (struct iphdr*) buffer;
         if (iph->protocol == 6) {
             printf("TCP packet received: Source IP: %s\n", inet_ntoa(source.sin_addr));
+            checkIP(inet_ntoa(source.sin_addr), argv[1]);
             printTCPPacket(buffer, data_size);
         }
     }
