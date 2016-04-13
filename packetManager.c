@@ -105,19 +105,15 @@ void sendPacket() {
 	char string_remote_ip_address[100];
 	short int remote_port_number;
 	int socketfd, OptVal, ris;
-	int n, i, nwrite, len;
+	int n, nwrite, len;
 	char msg[MAXSIZE];
-	
-	for(i=0;i<MAXSIZE;i++) {
-		msg[i]='a';
-	}
-	
-	msg[MAXSIZE-1]='\0';
-	
+
+    strcpy(msg, "Sample message");
+    msg[MAXSIZE-1]='\0';
+
 	strncpy(string_remote_ip_address, "127.0.0.1", 99);
 	remote_port_number = atoi("3000");
 
-	/* get a datagram socket */
 	printf("Initializing socket...\n");
 	socketfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (socketfd == SOCKET_ERROR) {
@@ -125,7 +121,6 @@ void sendPacket() {
 		exit(1);
 	}
 
-	/* avoid EADDRINUSE error on bind() */
 	OptVal = 1;
 	printf ("Setting socket options...\n");
 	ris = setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, (char *)&OptVal, sizeof(OptVal));
@@ -134,7 +129,6 @@ void sendPacket() {
 		exit(1);
 	}
 
-	/* name the socket */
 	memset ( &Local, 0, sizeof(Local) );
 	Local.sin_family = AF_INET;
 	Local.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -146,13 +140,11 @@ void sendPacket() {
 		exit(1);
 	}
 
-	/* assign our destination address */
 	memset ( &Serv, 0, sizeof(Serv) );
 	Serv.sin_family = AF_INET;
 	Serv.sin_addr.s_addr = inet_addr(string_remote_ip_address);
 	Serv.sin_port = htons(remote_port_number);
 
-	/* connection request */
 	printf ("Connecting...\n");
 	ris = connect(socketfd, (struct sockaddr*) &Serv, sizeof(Serv));
 	if (ris == SOCKET_ERROR)  {
@@ -160,15 +152,14 @@ void sendPacket() {
 		exit(1);
 	}
 
-	/*send data out*/
 	len = strlen(msg)+1;
 	nwrite = 0;
 	printf ("Sending...\n");
 	fflush(stdout);
-	while((n=write(socketfd, &(msg[nwrite]), len-nwrite)) > 0) {
+	while ((n=write(socketfd, &(msg[nwrite]), len-nwrite)) > 0) {
 		nwrite+=n;
 	}
-	if(n < 0) {
+	if (n < 0) {
 		char msgerror[1024];
 		sprintf(msgerror,"Sending failed [err %d] ",errno);
 		perror(msgerror);
@@ -178,29 +169,36 @@ void sendPacket() {
 	close(socketfd);
 }
 
-void checkIP(char* targetIp, char* ip) {
-	if (strcmp(targetIp, ip) == 0) {
-		// printf("Target IP found. Sending an imaginary packet.\n");
-		sendPacket();
-	}
+void receivePackets(int sock_raw, char* targetIp) {
+    unsigned int saddr_size , data_size;
+    struct sockaddr saddr;   
+    unsigned char* buffer = (unsigned char*) malloc(65536);   
+    saddr_size = sizeof(saddr);
+    data_size = recvfrom(sock_raw, buffer, 65536, 0, &saddr, &saddr_size);
+    if (data_size <0 ) {
+        printf("Recvfrom error , failed to get packets\n");
+        exit(1);
+    }
+    struct iphdr *iph = (struct iphdr*) buffer;
+    if (iph->protocol == 6) {
+        printf("TCP packet received: Source IP: %s\n", inet_ntoa(source.sin_addr));
+        if (strcmp(inet_ntoa(source.sin_addr), targetIp) == 0) {
+            sendPacket();
+        }
+        printTCPPacket(buffer, data_size);
+    }
 }
 
 int main(int argc, char** argv) {
 	int sock_raw;
-    unsigned int saddr_size , data_size;
-    struct sockaddr saddr;   
-    unsigned char* buffer = (unsigned char*) malloc(65536);   
     logfile = fopen("packets.txt", "w");
     sock_raw = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
+    if (sock_raw < 0) {
+        printf("Socket Error\n");
+        exit(1);
+    }
     while (1) {
-        saddr_size = sizeof(saddr);
-        data_size = recvfrom(sock_raw, buffer, 65536, 0, &saddr, &saddr_size);
-        struct iphdr *iph = (struct iphdr*) buffer;
-        if (iph->protocol == 6) {
-            printf("TCP packet received: Source IP: %s\n", inet_ntoa(source.sin_addr));
-            checkIP(inet_ntoa(source.sin_addr), argv[1]);
-            printTCPPacket(buffer, data_size);
-        }
+        receivePackets(sock_raw, argv[1]);
     }
     close(sock_raw);
     return 0;
